@@ -1,0 +1,13 @@
+name: MediaPipe-Detector
+version: long
+path_in_assets: models/long.onnx
+path_to_assets: null
+engine: onnxruntime
+size:
+  - 256
+  - 256
+extra_sizes: []
+mean: null
+stnd: null
+interpolation: 3
+threshold: 0.7
