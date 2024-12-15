@@ -14,7 +14,7 @@ PATH = pathlib.Path(__file__).resolve().parent
 def test_short_coreml():
     r"""Test mediapipe.detector."""
     if platform.system() == "Darwin":
-        process = astrapia.mediapipe.detector.Process.load_short(engine="coreml")
+        process = astrapia.examples.mediapipe.detector.Process.load_short(engine="coreml")
         itensor = astrapia.data.ImageTensor(tensor=PATH / "sample/sample.jpeg")
         process(itensor)
         assert len(itensor.detections) == 1
@@ -28,7 +28,7 @@ def test_short_coreml():
 def test_short_coreml_2X():
     r"""Test mediapipe.detector."""
     if platform.system() == "Darwin":
-        process = astrapia.mediapipe.detector.Process.load_short(engine="coreml")
+        process = astrapia.examples.mediapipe.detector.Process.load_short(engine="coreml")
         process.specs.extra_sizes.append((1024, 1024))
 
         itensor = astrapia.data.ImageTensor(tensor=PATH / "sample/sample.jpeg")
@@ -41,7 +41,7 @@ def test_short_coreml_2X():
 
 def test_short_ort():
     r"""Test mediapipe.detector."""
-    process = astrapia.mediapipe.detector.Process.load_short(engine="onnxruntime")
+    process = astrapia.examples.mediapipe.detector.Process.load_short(engine="onnxruntime")
     itensor = astrapia.data.ImageTensor(tensor=PATH / "sample/sample.jpeg")
     process(itensor)
     assert len(itensor.detections) == 1
@@ -49,10 +49,16 @@ def test_short_ort():
     image = itensor.detections[0].aligned(itensor.tensor, 128)
     cv2.imwrite(str(PATH / "results/sample_short_ort_aligned.webp"), image[..., ::-1])
 
+    # save detection
+    itensor.save_detections(PATH / "results/sample_short_ort.yaml")
+    itensor_ = astrapia.data.ImageTensor(tensor=PATH / "sample/sample.jpeg")
+    itensor_.load_detections(PATH / "results/sample_short_ort.yaml")
+    assert itensor.detections[0].iod == itensor_.detections[0].iod
+
 
 def test_short_ort_2X():
     r"""Test mediapipe.detector."""
-    process = astrapia.mediapipe.detector.Process.load_short(engine="onnxruntime")
+    process = astrapia.examples.mediapipe.detector.Process.load_short(engine="onnxruntime")
     process.specs.extra_sizes.append((1024, 1024))
 
     itensor = astrapia.data.ImageTensor(tensor=PATH / "sample/sample.jpeg")
@@ -66,7 +72,7 @@ def test_short_ort_2X():
 def test_long_coreml():
     r"""Test mediapipe.detector."""
     if platform.system() == "Darwin":
-        process = astrapia.mediapipe.detector.Process.load_long(engine="coreml")
+        process = astrapia.examples.mediapipe.detector.Process.load_long(engine="coreml")
         itensor = astrapia.data.ImageTensor(tensor=PATH / "sample/sample.jpeg")
         process(itensor)
         assert len(itensor.detections) == 1
@@ -78,7 +84,7 @@ def test_long_coreml():
 def test_long_ort():
     r"""Test mediapipe.detector."""
     if platform.system() == "Darwin":
-        process = astrapia.mediapipe.detector.Process.load_long(engine="onnxruntime")
+        process = astrapia.examples.mediapipe.detector.Process.load_long(engine="onnxruntime")
         itensor = astrapia.data.ImageTensor(tensor=PATH / "sample/sample.jpeg")
         process(itensor)
         assert len(itensor.detections) == 1

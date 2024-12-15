@@ -100,7 +100,9 @@ class ImageTensor(BaseTensor):
 
     def load_detections(self, path: pathlib.Path) -> None:
         with open(path) as txt:
-            _ = yaml.safe_load(txt.read())
+            detections = yaml.safe_load(txt.read())["detections"]
+
+        self.detections += ImageTensor.validate_detections(detections)
 
     def save_detections(self, path: pathlib.Path) -> None:
         if not isinstance(path, pathlib.Path):
@@ -109,7 +111,7 @@ class ImageTensor(BaseTensor):
             raise TypeError(f"{self.__class__.__name__}.save_detections: path must have '.yaml' as suffix.")
 
         with open(path, "w") as txt:
-            txt.write(self.model_dump_json(exlcude={"set"}, indent=2))
+            txt.write(self.model_dump_json(exclude={"storage", "tensor"}, indent=2))
 
 
 class Points(BaseTensor):
