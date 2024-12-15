@@ -129,7 +129,7 @@ class Process(BaseMLProcess):
             valid = (((all_boxes[..., 2:] - all_boxes[..., :2]) ** 2).sum(-1) ** 0.5) >= self._min_area
             all_scores, all_boxes, all_points = (x[valid] for x in (all_scores, all_boxes, all_points))
         # nms
-        valid = nms_numba(all_boxes, all_scores, self._threshold_iou)
+        valid = nms_numba(all_boxes, all_scores, self._threshold_iou) == 1
         all_scores, all_boxes, all_points = (x[valid] for x in (all_scores, all_boxes, all_points))
 
         # add all detections

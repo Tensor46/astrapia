@@ -26,7 +26,7 @@ def nms_numba(boxes: np.ndarray, scores: np.ndarray, threshold: float) -> np.nda
         areas[i] = (boxes[i, 2] - boxes[i, 0] + 1) * (boxes[i, 3] - boxes[i, 1] + 1)
 
     order = scores.argsort()[::-1]
-    keep = np.ones(n, dtype=np.bool8)
+    keep = np.ones(n, dtype=np.int32)
     for i in range(n):
         if not keep[order[i]]:
             continue
@@ -40,6 +40,6 @@ def nms_numba(boxes: np.ndarray, scores: np.ndarray, threshold: float) -> np.nda
             intersection = w * h
             iou = intersection / (areas[order[i]] + areas[order[j]] - intersection)
             if iou > threshold:
-                keep[order[j]] = False
+                keep[order[j]] = 0
 
     return keep
