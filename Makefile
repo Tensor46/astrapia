@@ -1,7 +1,3 @@
-SOURCE_DIR = src
-PYTHON_FILES = `find . -path './build' -prune -o -path './dist' -prune -o -name '*.py' -print`;
-
-
 # version checks
 .PHONY: tool-check
 tool-check:

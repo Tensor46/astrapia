@@ -25,7 +25,7 @@ class BaseMLProcess(BaseProcess):
         interpolation: Literal[1, 2, 3]
         threshold: float
 
-        @pydantic.field_validator("mean", "stnd")
+        @pydantic.field_validator("mean", "stnd", mode="before")
         @classmethod
         def ndarray(cls, data: Any) -> np.ndarray | None:
             if isinstance(data, list | tuple):

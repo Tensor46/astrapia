@@ -6,23 +6,24 @@ import pydantic
 
 from astrapia import assets
 from astrapia.callbacks.base import BaseCallback
+from astrapia.callbacks.to_bchw import ToBCHW
 from astrapia.data.face import Face
 from astrapia.data.tensor import ImageTensor
 from astrapia.engine.base_ml import BaseMLProcess
 from astrapia.utils import nms_numba
 
 
-class PrepareInferenceTensor(BaseCallback):
+class PrepareImages(BaseCallback):
     def __init__(self, specs: pydantic.BaseModel) -> None:
         self.specs = specs
 
     def before_process(self, request: ImageTensor) -> Any:
-        request.storage["tensors"] = []
+        request.storage["images"] = []
         request.storage["scales"] = []
         request.storage["sizes"] = []
         for size in [self.specs.size, *self.specs.extra_sizes]:
-            tensor, scale = request.resize_with_pad(size)
-            request.storage["tensors"].append(np.float32(np.transpose(tensor, (2, 0, 1))[None]))
+            image, scale = request.resize_with_pad(size)
+            request.storage["images"].append(image)
             request.storage["scales"].append(scale)
             request.storage["sizes"].append(size)
         return request
@@ -40,7 +41,7 @@ class Process(BaseMLProcess):
 
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
-        self.__callbacks__ += (PrepareInferenceTensor(self.specs),)
+        self.__callbacks__ += (PrepareImages(self.specs), ToBCHW(self.specs))
 
         # Detector Specs
         self._strides: tuple[int, ...] = (8, 16, 16, 16) if self.specs.version == "short" else (16, 32, 32, 32)

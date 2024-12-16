@@ -5,30 +5,31 @@ import pydantic
 
 from astrapia import assets
 from astrapia.callbacks.base import BaseCallback
+from astrapia.callbacks.to_bchw import ToBCHW
 from astrapia.data.face import Face
 from astrapia.data.tensor import ImageTensor
 from astrapia.engine.base_ml import BaseMLProcess
 
 
-class PrepareInferenceTensor(BaseCallback):
+class PrepareImages(BaseCallback):
     def __init__(self, specs: pydantic.BaseModel) -> None:
         self.specs = specs
 
     def before_process(self, request: ImageTensor) -> Any:
-        request.storage["tensors"] = []
+        request.storage["images"] = []
         request.storage["tms"] = []
         for detection in request.detections:
             if isinstance(detection, Face):
-                tensor, tm = detection.aligned(
+                image, tm = detection.aligned(
                     request.tensor,
                     max_side=max(self.specs.size),
                     force_max_side=True,
                     return_tm=True,
                 )
-                request.storage["tensors"].append(np.float32(np.transpose(tensor, (2, 0, 1))[None]))
+                request.storage["images"].append(image)
                 request.storage["tms"].append(tm)
             else:
-                request.storage["tensors"].append(None)
+                request.storage["images"].append(None)
                 request.storage["tms"].append(None)
         return request
 
@@ -44,7 +45,7 @@ class Process(BaseMLProcess):
 
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
-        self.__callbacks__ += (PrepareInferenceTensor(self.specs),)
+        self.__callbacks__ += (PrepareImages(self.specs), ToBCHW(self.specs))
 
     @classmethod
     def load_mesh(cls, engine: Literal["coreml", "onnxruntime"]):

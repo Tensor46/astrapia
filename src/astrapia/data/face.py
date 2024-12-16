@@ -87,6 +87,10 @@ class Face(BaseDetection):
         """Get points from indices."""
         return None if len(index) == 0 else self.points[index].mean(0)
 
+    @property
+    def source(self) -> np.ndarray:
+        return np.stack((self.right_eye, self.left_eye, self.nose_tip, self.mouth), 0)
+
     def aligned(
         self,
         image: np.ndarray,

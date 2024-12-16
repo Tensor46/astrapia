@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "astrapia"
 dynamic = ["click", "dependencies", "version"]
-description = 'Still figuring.'
+description = 'ML Inference Library with CoreML and ONNXRunTime backends.'
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
@@ -14,7 +14,7 @@ authors = [
   { name = "Tensor46", email = "vikas11187@gmail.com" },
 ]
 classifiers = [
-  "Development Status :: 1 - Planning",
+  "Development Status :: 4 - Beta",
   "Operating System :: OS Independent",
   "Programming Language :: Python",
   "Programming Language :: Python :: 3.10",
