@@ -51,7 +51,7 @@ class Face(BaseDetection):
     @property
     def right_eye_index(self) -> list[int]:
         """Right eye center indices."""
-        return [0] if self.n_points == 6 else None
+        return [0] if self.n_points == 6 else [243, 27, 130, 23]
 
     @property
     def left_eye(self) -> np.ndarray:
@@ -61,7 +61,7 @@ class Face(BaseDetection):
     @property
     def left_eye_index(self) -> list[int]:
         """Left eye center indices."""
-        return [1] if self.n_points == 6 else None
+        return [1] if self.n_points == 6 else [463, 257, 359, 253]
 
     @property
     def nose_tip(self) -> np.ndarray:
@@ -71,7 +71,7 @@ class Face(BaseDetection):
     @property
     def nose_tip_index(self) -> list[int]:
         """Nose tip indices."""
-        return [2] if self.n_points == 6 else None
+        return [2] if self.n_points == 6 else [1, 4, 44, 274]
 
     @property
     def mouth(self) -> np.ndarray:
@@ -81,25 +81,33 @@ class Face(BaseDetection):
     @property
     def mouth_index(self) -> list[int]:
         """Mouth center indices."""
-        return [3] if self.n_points == 6 else None
+        return [3] if self.n_points == 6 else [0, 76, 17, 306]
 
     def index2point(self, index: tuple[int]):
         """Get points from indices."""
         return None if len(index) == 0 else self.points[index].mean(0)
 
-    def aligned(self, image: np.ndarray, max_side: int | None = None) -> np.ndarray:
+    def aligned(
+        self,
+        image: np.ndarray,
+        max_side: int | None = None,
+        force_max_side: bool = False,
+        return_tm: bool = False,
+    ) -> np.ndarray:
         """Align face with landmarks (eyes, nose-tip and mouth)."""
         source = np.stack((self.right_eye, self.left_eye, self.nose_tip, self.mouth), 0)
         reye, leye, *_ = self.__target_points__
         h = w = int(self.iod / (((reye - leye) ** 2).sum() ** 0.5))
-        if max_side is not None and max_side < h:
+        if max_side is not None and (max_side < h or force_max_side):
             h = w = int(max_side)
 
         target = self.__target_points__.copy()[: source.shape[0]]
         target[:, 0] *= w
         target[:, 1] *= h
         tm = similarity(source, target)
-        return cv2.warpAffine(image, tm[:2], (w, h))
+
+        aligend_image = cv2.warpAffine(image, tm[:2], (w, h))
+        return (aligend_image, tm) if return_tm else aligend_image
 
     def crop_centered(self, image: np.ndarray, iod_multiplier: float = 4.0) -> np.ndarray:
         """Face crop with centered eyes."""
@@ -130,6 +138,11 @@ class Face(BaseDetection):
         image = image if inplace else image.copy()
         corners = np.round(self.aligned_corners()).astype(int)
         cv2.polylines(image, [corners.reshape(-1, 1, 2)], True, (236, 46, 36), 2)
+
+        # add points
+        radius = int(max(2, self.iod // 64))
+        for x, y in (self.right_eye, self.left_eye, self.nose_tip):
+            cv2.circle(image, (round(x), round(y)), radius, (16, 196, 146), -1)
         return image
 
     @pydantic.field_serializer("points", when_used="json")
@@ -137,4 +150,5 @@ class Face(BaseDetection):
         return self.encode(data)
 
     def __repr__(self) -> str:
-        return f"Face({self.confidence:.4f}, box={self.box_cornerform}, iod={self.iod:.4f})"
+        is_mesh = self.points.shape[0] == 468
+        return f"Face({self.confidence:.4f}, box={self.box_cornerform}, iod={self.iod:.4f}, is_mesh={is_mesh})"

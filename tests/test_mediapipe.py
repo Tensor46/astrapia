@@ -91,3 +91,55 @@ def test_long_ort():
 
         image = itensor.detections[0].aligned(itensor.tensor, 128)
         cv2.imwrite(str(PATH / "results/sample_long_ort_aligned.webp"), image[..., ::-1])
+
+
+def test_short_mesh_coreml():
+    r"""Test mediapipe.mesh."""
+    if platform.system() == "Darwin":
+        process = astrapia.examples.mediapipe.detector.Process.load_short(engine="coreml")
+        process_mesh = astrapia.examples.mediapipe.mesh.Process.load_mesh(engine="coreml")
+        itensor = astrapia.data.ImageTensor(tensor=PATH / "sample/sample.jpeg")
+        process(itensor)
+        process_mesh(itensor)
+
+        assert len(itensor.detections) == 1
+        assert itensor.detections[0].points.shape[0] == 468
+
+        image = itensor.detections[0].aligned(itensor.tensor, 128)
+        cv2.imwrite(str(PATH / "results/sample_short_mesh_coreml_aligned.webp"), image[..., ::-1])
+
+
+def test_short_mesh_ort():
+    r"""Test mediapipe.mesh."""
+    process = astrapia.examples.mediapipe.detector.Process.load_short(engine="onnxruntime")
+    process_mesh = astrapia.examples.mediapipe.mesh.Process.load_mesh(engine="onnxruntime")
+    itensor = astrapia.data.ImageTensor(tensor=PATH / "sample/sample.jpeg")
+    process(itensor)
+    process_mesh(itensor)
+
+    assert len(itensor.detections) == 1
+    assert itensor.detections[0].points.shape[0] == 468
+
+    image = itensor.detections[0].aligned(itensor.tensor, 128)
+    cv2.imwrite(str(PATH / "results/sample_short_mesh_ort_aligned.webp"), image[..., ::-1])
+
+    # save detection
+    itensor.save_detections(PATH / "results/sample_short_mesh_ort.yaml")
+
+
+def test_fd_ort():
+    r"""Test mediapipe.facedetector."""
+    process = astrapia.examples.mediapipe.fd.Process(
+        version="short",
+        do_mesh=True,
+        engine="coreml",
+        extra_sizes=[(1280, 1280)],
+    )
+    itensor = astrapia.data.ImageTensor(tensor=PATH / "sample/sample.jpeg")
+    process(itensor)
+
+    assert len(itensor.detections) == 1
+    assert itensor.detections[0].points.shape[0] == 468
+
+    image = itensor.detections[0].aligned(itensor.tensor, 128)
+    cv2.imwrite(str(PATH / "results/sample_fd_ort_aligned.webp"), image[..., ::-1])
