@@ -129,10 +129,10 @@ def test_short_mesh_ort():
 
 def test_fd_ort():
     r"""Test mediapipe.facedetector."""
-    process = astrapia.examples.mediapipe.fd.Process(
+    process = astrapia.examples.mediapipe.detector_mesh.Process(
         version="short",
         do_mesh=True,
-        engine="coreml",
+        engine="onnxruntime",
         extra_sizes=[(1280, 1280)],
     )
     itensor = astrapia.data.ImageTensor(tensor=PATH / "sample/sample.jpeg")

@@ -1,3 +1,3 @@
-__all__ = ["detector", "fd", "mesh"]
+__all__ = ["detector", "detector_mesh", "mesh"]
 
-from astrapia.examples.mediapipe import detector, fd, mesh
+from astrapia.examples.mediapipe import detector, detector_mesh, mesh
