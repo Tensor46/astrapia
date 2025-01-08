@@ -1,5 +1,6 @@
-__all__ = ["similarity"]
+__all__ = ["similarity", "source2target_converter"]
 
+import cv2
 import numpy as np
 
 
@@ -40,3 +41,32 @@ def similarity(source: np.ndarray, target: np.ndarray) -> np.ndarray:
     T[:dim, dim] = t_mu - scale * (T[:dim, :dim] @ s_mu.T)
     T[:dim, :dim] *= scale
     return T
+
+
+def source2target_converter(
+    image: np.ndarray | None,
+    points: np.ndarray | None,
+    size_hxw: tuple[int, int] | None = None,
+    source: np.ndarray | None = None,
+    target: np.ndarray | None = None,
+    tmat: np.ndarray | None = None,
+    invert: bool = False,
+) -> tuple[np.ndarray | None, np.ndarray | None]:
+    if not ((isinstance(source, np.ndarray) and isinstance(target, np.ndarray)) or isinstance(tmat, np.ndarray)):
+        raise ValueError("source2target_converter: Neither tmat nor (source and target) are valid.")
+    if tmat is None:  # only compute when tmat is not available
+        n = min(source.shape[0], target.shape[0])
+        tmat = similarity(source[:n], target[:n])
+    if invert:  # projecting target (image | points) to source
+        tmat = np.linalg.inv(tmat)
+
+    if image is not None:  # warp image
+        if size_hxw is None:
+            raise ValueError("source2target_converter: size_hxw is required to transform image.")
+        image = cv2.warpAffine(image, tmat[:2], size_hxw[::-1])
+
+    if points is not None:  # project points
+        points = np.concatenate((points, np.ones(points.shape[0])[:, None]), -1)
+        points = (tmat @ points.T).T
+        points = points[:, :2] / points[:, [2]]
+    return image, points

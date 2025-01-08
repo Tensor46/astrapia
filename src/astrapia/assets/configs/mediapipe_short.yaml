@@ -6,7 +6,6 @@ engine: onnxruntime
 size:
   - 128
   - 128
-extra_sizes: []
 mean: null
 stnd: null
 interpolation: 3

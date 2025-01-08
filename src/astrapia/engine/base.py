@@ -1,23 +1,40 @@
 import logging
 import pathlib
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Annotated, Any
 
+import numpy as np
 import pydantic
 
 from astrapia import assets
 from astrapia.callbacks.base import BaseCallback
+from astrapia.utils import timer
 
 
 logger = logging.getLogger("BaseProcess")
 
 
+class Extra(pydantic.BaseModel, extra="allow"): ...
+
+
 class BaseProcess(ABC):
     """Base process."""
 
-    class Specs(pydantic.BaseModel):
+    class Specs(pydantic.BaseModel, extra="ignore"):
         name: str
         version: pydantic.constr(to_lower=True)
+        clear_storage: Annotated[bool, pydantic.Field(default=True, frozen=True)]
+        extra: Annotated[Extra, pydantic.Field(default=Extra())]
+
+        @pydantic.model_validator(mode="before")
+        @classmethod
+        def extras(cls, data: dict[str, Any]) -> dict[str, Any]:
+            for key in list(data.keys()):
+                if key not in cls.model_fields:
+                    if "extra" not in data:
+                        data["extra"] = {}
+                    data["extra"][key] = data[key]
+            return data
 
     __callbacks__: tuple[BaseCallback, ...] = ()
     __extra__ = None
@@ -27,6 +44,10 @@ class BaseProcess(ABC):
 
     def __init__(self, **kwargs) -> None:
         self.specs = self.__specs__(**kwargs)
+
+    @property
+    def name(self) -> str:
+        return f"{self.specs.name}: ({self.specs.version})"
 
     @classmethod
     def from_yaml(cls, path_to_assets: pathlib.Path, path_to_yaml: pathlib.Path):
@@ -46,15 +67,16 @@ class BaseProcess(ABC):
 
     def validate_request(self, request: Any) -> None:
         if not isinstance(request, self.__requests__):
-            logger.error(f"{self.__class__.__name__}: invalid type for request.")
-            raise TypeError(f"{self.__class__.__name__}: invalid type for request.")
+            logger.error(f"{self.specs.name}: invalid type for request.")
+            raise TypeError(f"{self.specs.name}: invalid type for request.")
 
-    def __call__(self, *args) -> dict[str, Any]:
+    def __call__(self, *args) -> Any:
         if len(args) == 0:
-            logger.error(f"{self.__class__.__name__}: missing request.")
-            raise TypeError(f"{self.__class__.__name__}: missing request.")
+            logger.error(f"{self.specs.name}: missing request.")
+            raise TypeError(f"{self.specs.name}: missing request.")
         if len(args) == 1:
-            return self.__process__(*args)
+            with timer.Timer(name=self.name):
+                return self.__process__(*args)
         return [self.__process__(request=arg) for arg in args]
 
     def __process__(self, request: Any) -> Any:
@@ -67,6 +89,11 @@ class BaseProcess(ABC):
         # callbacks - after
         for callback in self.__callbacks__:
             callback.after_process(response)
+        # clear storage
+        if self.specs.clear_storage and hasattr(request, "clear_storage"):
+            request.clear_storage()
+        if self.specs.clear_storage and hasattr(response, "clear_storage"):
+            response.clear_storage()
         return response
 
     @abstractmethod
@@ -75,5 +102,19 @@ class BaseProcess(ABC):
     @abstractmethod
     def default_response(self) -> Any: ...
 
+    @staticmethod
+    def _sigmoid(x: np.ndarray) -> np.ndarray:
+        x = x.copy()
+        pos = x > 0
+        neg = ~pos
+        x[pos] = 1 / (1 + np.exp(-x[pos]))
+        x[neg] = np.exp(x[neg]) / (1 + np.exp(x[neg]))
+        return x
+
+    @staticmethod
+    def _softmax(x: np.ndarray) -> np.ndarray:
+        x = x - x.max(-1, keepdims=True)
+        return np.exp(x) / np.exp(x).sum(-1, keepdims=True)
+
     def __repr__(self) -> str:
-        return f"{self.__class__.__name__}{self.specs.model_dump_json(indent=2)}"
+        return f"{self.specs.name}{self.specs.model_dump_json(exclude={'clear_storage'}, indent=2)}"

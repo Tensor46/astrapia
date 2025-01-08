@@ -11,7 +11,7 @@ __MAGIC__: str = "@$tr@46="
 class BaseData(pydantic.BaseModel, arbitrary_types_allowed=True, extra="ignore"):
     storage: Annotated[dict[str, Any], pydantic.Field(default={})]
 
-    def clear(self) -> None:
+    def clear_storage(self) -> None:
         self.storage = {}
 
     def model_dump(self, **kwargs) -> dict[str, Any]:
@@ -41,7 +41,7 @@ class BaseData(pydantic.BaseModel, arbitrary_types_allowed=True, extra="ignore")
     def decode(data: str) -> np.ndarray:
         splits = data.split(__MAGIC__)
         if len(splits) != 2:
-            raise ValueError("")
+            raise ValueError("BaseData.decode: data does not contain the MAGIC string.")
 
         *subsplits, dtype = splits[0].strip()[:-1].split("/")
         shape = tuple(map(int, subsplits)) if len(subsplits) else (-1,)

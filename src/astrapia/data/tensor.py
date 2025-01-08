@@ -78,6 +78,13 @@ class ImageTensor(BaseTensor):
     def to_bchw(self, gray: bool = False) -> np.ndarray:
         return (self.to_gray()[None, None] if gray else np.transpose(self.tensor.copy(), (2, 0, 1)))[None]
 
+    def annotate(self, **kwargs) -> np.ndarray:
+        """Annotate image."""
+        image = self.tensor.copy()
+        for detection in self.detections:
+            detection.annotate(image, inplace=True, **kwargs)
+        return image
+
     def resize(self, size: tuple[int, int], interpolation: int = 3) -> np.ndarray:
         # resize
         #   size: (height x width)

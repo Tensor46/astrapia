@@ -1,6 +1,4 @@
-__all__ = [
-    "nms_numba",
-]
+__all__ = ["nms_numba"]
 
 import numba
 import numpy as np

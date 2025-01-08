@@ -27,28 +27,43 @@ class BaseMLProcess(BaseProcess):
 
         @pydantic.field_validator("mean", "stnd", mode="before")
         @classmethod
-        def ndarray(cls, data: Any) -> np.ndarray | None:
+        def to_ndarray(cls, data: Any) -> np.ndarray | None:
             if isinstance(data, list | tuple):
                 data = np.squeeze(np.array(data, dtype=np.float32))
             return data
 
+        @pydantic.field_serializer("mean", when_used="json")
+        def serialize_mean(self, data: np.ndarray) -> str:
+            return data.tolist() if isinstance(data, np.ndarray) else data
+
+        @pydantic.field_serializer("stnd", when_used="json")
+        def serialize_stnd(self, data: np.ndarray) -> str:
+            return data.tolist() if isinstance(data, np.ndarray) else data
+
     __specs__ = Specs
     __inames__: tuple[str, ...] = ()
     __onames__: tuple[str, ...] = ()
+    __onnx_providers__: Literal["AUTO", "CPU"] = "AUTO"
 
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
         self._load_model()
 
+    @property
+    def name(self) -> str:
+        return f"{self.specs.name}: ({self.specs.version}, engine={self.specs.engine})"
+
     def _load_model(self) -> None:
         path_to_model = (self.specs.path_to_assets / self.specs.path_in_assets).with_suffix(".onnx")
         if self.specs.engine == "coreml":
-            path_to_model = path_to_model.with_suffix(".mlpackage")
+            path_to_model = path_to_model.with_suffix(".mlmodel")
 
         if self.specs.engine == "coreml":  # load coreml model
-            if not path_to_model.is_dir():
-                logger.error(f"{self.__class__.__name__}: file not found {path_to_model}")
-                raise FileNotFoundError(f"{self.__class__.__name__}: file not found {path_to_model}")
+            if not path_to_model.is_file():
+                path_to_model = path_to_model.with_suffix(".mlpackage")
+                if not path_to_model.is_dir():
+                    logger.error(f"{self.__class__.__name__}: file | folder not found {path_to_model}")
+                    raise FileNotFoundError(f"{self.__class__.__name__}: file | folder not found {path_to_model}")
 
             import coremltools as ct
 
@@ -65,8 +80,19 @@ class BaseMLProcess(BaseProcess):
 
             import onnxruntime as ort
 
-            self.model = ort.InferenceSession(path_to_model)
-            # get input and output namesd
+            options = ort.SessionOptions()
+            options.enable_mem_pattern = True
+            options.enable_mem_reuse = True
+            options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_EXTENDED
+            providers = ["CPUExecutionProvider"]
+            if self.__onnx_providers__ == "AUTO" and "TensorrtExecutionProvider" in ort.get_available_providers():
+                providers = ["TensorrtExecutionProvider", *providers]
+            if self.__onnx_providers__ == "AUTO" and "CUDAExecutionProvider" in ort.get_available_providers():
+                providers = ["CUDAExecutionProvider", *providers]
+            if self.__onnx_providers__ == "AUTO" and "CoreMLExecutionProvider" in ort.get_available_providers():
+                providers = ["CoreMLExecutionProvider", *providers]
+            self.model = ort.InferenceSession(path_to_model, sess_options=options, providers=providers)
+            # get input and output names
             self.__inames__ = tuple(x.name for x in self.model.get_inputs())
             self.__onames__ = tuple(x.name for x in self.model.get_outputs())
 
@@ -78,7 +104,7 @@ class BaseMLProcess(BaseProcess):
         output = self.model.run(list(self.__onames__), dict(zip(self.__inames__, args, strict=False)))
         return dict(zip(self.__onames__, output, strict=False))
 
-    def process(self, *args) -> dict[str, Any]:
+    def process(self, *args) -> Any:
         if self.specs.engine == "coreml":
             output = self._call_coreml(*args)
 
@@ -92,6 +118,3 @@ class BaseMLProcess(BaseProcess):
 
     @abstractmethod
     def default_response(self) -> Any: ...
-
-    def __repr__(self) -> str:
-        return f"{self.__class__.__name__}{self.specs.model_dump_json(indent=2)}"

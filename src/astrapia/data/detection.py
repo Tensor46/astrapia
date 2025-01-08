@@ -64,28 +64,56 @@ class BaseDetection(BaseData, arbitrary_types_allowed=True):
         return data
 
     @property
-    def box_cornerform(self) -> tuple[int, int, int, int]:
-        return np.round(self.box.copy()).astype(int).tolist()
+    def centerform(self) -> np.ndarray:
+        return self.cornerform_to_centerform(self.cornerform)
 
-    def crop(self, image: np.ndarray, pad: float = 0.0) -> np.ndarray:
-        """Detected box."""
-        box = self.box.copy()
-        if pad > 0:
-            wp, hp = pad * (box[2] - box[0]), pad * (box[3] - box[1])
-            box = (box[0] - wp / 2, box[1] - hp / 2, box[2] + wp / 2, box[3] + hp / 2)
-        x1, y1, x2, y2 = map(int, box)
+    @property
+    def cornerform(self) -> np.ndarray:
+        return self.box.copy()
+
+    @property
+    def corners(self) -> tuple[tuple[float, float], ...]:
+        x1, y1, x2, y2 = self.cornerform.tolist()
+        return (
+            (x1, y1),
+            (x2, y1),
+            (x2, y2),
+            (x1, y2),
+        )
+
+    def crop(self, image: np.ndarray, scale: float = 1.0) -> np.ndarray:
+        """Image crop using detected box."""
+        x1, y1, x2, y2 = np.round(self.crop_xyxy(scale=scale)).astype(int).tolist()
         return image[y1:y2, x1:x2]
+
+    def crop_xyxy(self, scale: float = 1.0) -> np.ndarray:
+        """Detected box."""
+        x, y, w, h = self.centerform.tolist()
+        w *= scale
+        h *= scale
+        return self.centerform_to_cornerform((x, y, w, h))
 
     def annotate(self, image: np.ndarray, inplace: bool = False) -> np.ndarray:
         """Annotate image."""
         image = image if inplace else image.copy()
-        x1, y1, x2, y2 = self.box_cornerform
+        x1, y1, x2, y2 = np.round(self.cornerform).astype(int).tolist()
         cv2.rectangle(image, (x1, y1), (x2, y2), color=(236, 46, 36), thickness=2)
         return image
+
+    @staticmethod
+    def cornerform_to_centerform(box: np.ndarray) -> np.ndarray:
+        x1, y1, x2, y2 = np.float32(box)
+        return np.float32([(x1 + x2) / 2, (y1 + y2) / 2, x2 - x1, y2 - y1])
+
+    @staticmethod
+    def centerform_to_cornerform(box: np.ndarray) -> np.ndarray:
+        x, y, w, h = np.float32(box)
+        return np.float32([x - w / 2, y - h / 2, x + w / 2, y + h / 2])
 
     @pydantic.field_serializer("box", when_used="json")
     def serialize_box(self, data: np.ndarray) -> str:
         return self.encode(data)
 
     def __repr__(self) -> str:
-        return f"Detection({self.confidence:.4f}, box={self.box_cornerform})"
+        box = np.round(self.cornerform).astype(int).tolist()
+        return f"Detection({self.confidence:.4f}, box={box})"

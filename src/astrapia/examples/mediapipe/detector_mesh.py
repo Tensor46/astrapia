@@ -13,7 +13,6 @@ class Process(BaseProcess):
         version: Annotated[Literal["short", "long"], pydantic.Field(default="short", frozen=True)]
         do_mesh: bool = False
         engine: Annotated[Literal["coreml", "onnxruntime"], pydantic.Field(default="onnxruntime", frozen=True)]
-        extra_sizes: Annotated[list[tuple[int, ...]], pydantic.Field(default=[])]
 
     __specs__ = Specs
     __requests__ = (ImageTensor,)
@@ -25,8 +24,10 @@ class Process(BaseProcess):
             self.detector = detector.Process.load_short(self.specs.engine)
         else:
             self.detector = detector.Process.load_long(self.specs.engine)
-        self.detector.specs.extra_sizes += self.specs.extra_sizes
         self.mesh = mesh.Process.load_mesh(self.specs.engine) if self.specs.do_mesh else None
+
+    def add_extra_size(self, size: tuple[int, int]) -> None:
+        self.detector.add_extra_size(size)
 
     def process(self, request: Any) -> Any:
         self.detector(request)
@@ -36,4 +37,5 @@ class Process(BaseProcess):
         return request
 
     def default_response(self, **kwargs) -> Any:
+        # Since request is the response!
         raise NotImplementedError()

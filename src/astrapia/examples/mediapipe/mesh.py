@@ -9,6 +9,7 @@ from astrapia.callbacks.to_bchw import ToBCHW
 from astrapia.data.face import Face
 from astrapia.data.tensor import ImageTensor
 from astrapia.engine.base_ml import BaseMLProcess
+from astrapia.geometry.transform import source2target_converter
 
 
 class PrepareImages(BaseCallback):
@@ -20,11 +21,11 @@ class PrepareImages(BaseCallback):
         request.storage["tms"] = []
         for detection in request.detections:
             if isinstance(detection, Face):
-                image, tm = detection.aligned(
+                image, tm = detection.aligned_face_with_tm(
                     request.tensor,
-                    max_side=max(self.specs.size),
-                    force_max_side=True,
-                    return_tm=True,
+                    side=max(self.specs.size),
+                    pad=-0.1,
+                    allow_smaller_side=False,
                 )
                 request.storage["images"].append(image)
                 request.storage["tms"].append(tm)
@@ -67,19 +68,17 @@ class Process(BaseMLProcess):
             # infer model
             output = super().process(tensor)
             output = {key: np.squeeze(value) for key, value in output.items()}
-            score, points_on_crop = output["scores"], output["points"][..., :2]
-            points_on_crop *= max(tensor.shape[2:])
+            score, points_on_crop = output[self.__onames__[0]], output[self.__onames__[1]][..., :2]
+
             # not reliable
             if score < self.specs.threshold:
                 continue
             # project points on crop to image
-            points_on_crop = np.concatenate((points_on_crop, np.ones(points_on_crop.shape[0])[:, None]), -1)
-            points_on_image = (np.linalg.inv(tm_image2crop) @ points_on_crop.T).T
-            points_on_image = points_on_image[:, :2] / points_on_image[:, [2]]
-            face.points = points_on_image
+            _, points_on_image = source2target_converter(None, points_on_crop, tmat=tm_image2crop, invert=True)
+            face.points = np.float32(points_on_image)
 
-        request.clear()
         return request
 
     def default_response(self, **kwargs) -> Any:
+        # Since request is the response!
         raise NotImplementedError()

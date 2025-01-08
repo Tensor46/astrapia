@@ -1,5 +1,5 @@
 from functools import lru_cache
-from typing import Annotated, Any, Literal
+from typing import Any, Literal
 
 import numpy as np
 import pydantic
@@ -10,7 +10,7 @@ from astrapia.callbacks.to_bchw import ToBCHW
 from astrapia.data.face import Face
 from astrapia.data.tensor import ImageTensor
 from astrapia.engine.base_ml import BaseMLProcess
-from astrapia.utils import nms_numba
+from astrapia.utils.nms_fns import nms_numba
 
 
 class PrepareImages(BaseCallback):
@@ -21,7 +21,7 @@ class PrepareImages(BaseCallback):
         request.storage["images"] = []
         request.storage["scales"] = []
         request.storage["sizes"] = []
-        for size in [self.specs.size, *self.specs.extra_sizes]:
+        for size in [self.specs.size, *self.specs.extra.sizes]:
             image, scale = request.resize_with_pad(size)
             request.storage["images"].append(image)
             request.storage["scales"].append(scale)
@@ -33,21 +33,25 @@ class Process(BaseMLProcess):
     class Specs(BaseMLProcess.Specs):
         name: Literal["MediaPipe-Detector"]
         version: Literal["short", "long"]
-        extra_sizes: Annotated[list[tuple[int, ...]], pydantic.Field(default=[])]
 
     __specs__ = Specs
     __requests__ = (ImageTensor,)
     __response__ = ImageTensor
 
     def __init__(self, **kwargs) -> None:
-        super().__init__(**kwargs)
+        kwargs["sizes"] = set(kwargs["sizes"]) if "sizes" in kwargs else set()
+        super().__init__(
+            **kwargs,
+            # Detector Specs
+            strides=(8, 16, 16, 16) if kwargs.get("version", "short") == "short" else (16, 32, 32, 32),
+            threshold_iou=0.3,
+            threshold_extra_sizes=0.8,  # non native sizes require higher threshold
+            min_area=12,
+        )
         self.__callbacks__ += (PrepareImages(self.specs), ToBCHW(self.specs))
 
-        # Detector Specs
-        self._strides: tuple[int, ...] = (8, 16, 16, 16) if self.specs.version == "short" else (16, 32, 32, 32)
-        self._threshold_iou: float = 0.3
-        self._threshold_extra_sizes: float = 0.8  # non native sizes require higher threshold
-        self._min_area: int = 12
+    def add_extra_size(self, size: tuple[int, int]) -> None:
+        self.specs.extra.sizes.add(size)
 
     def _compute_anchors(self, size: tuple[int, int]) -> np.ndarray:
         @lru_cache(maxsize=4)
@@ -64,7 +68,7 @@ class Process(BaseMLProcess):
                 anchors.append(yxs.repeat(repeats, axis=0))
             return np.concatenate(anchors).astype(np.float32)
 
-        return _compute_anchors(size, self._strides)
+        return _compute_anchors(size, self.specs.extra.strides)
 
     @classmethod
     def load_short(cls, engine: Literal["coreml", "onnxruntime"]):
@@ -110,7 +114,8 @@ class Process(BaseMLProcess):
             boxes = boxes.reshape(-1, 4)
             points = np.clip(points * max(size), 0, None)
             # thresholding
-            valid = scores >= (self.specs.threshold if size == self.specs.size else self._threshold_extra_sizes)
+            threshold = self.specs.threshold if size == self.specs.size else self.specs.extra.threshold_extra_sizes
+            valid = scores >= threshold
             scores, boxes, points = (x[valid] for x in (scores, boxes, points))
 
             # scale to image size
@@ -126,17 +131,16 @@ class Process(BaseMLProcess):
         sort = np.flip(np.argsort(all_scores))
         all_scores, all_boxes, all_points = (x[sort] for x in (all_scores, all_boxes, all_points))
         # remove invalid area
-        if self._min_area is not None:
-            valid = (((all_boxes[..., 2:] - all_boxes[..., :2]) ** 2).sum(-1) ** 0.5) >= self._min_area
+        if self.specs.extra.min_area is not None:
+            valid = (((all_boxes[..., 2:] - all_boxes[..., :2]) ** 2).sum(-1) ** 0.5) >= self.specs.extra.min_area
             all_scores, all_boxes, all_points = (x[valid] for x in (all_scores, all_boxes, all_points))
         # nms
-        valid = nms_numba(all_boxes, all_scores, self._threshold_iou) == 1
+        valid = nms_numba(all_boxes, all_scores, self.specs.extra.threshold_iou) == 1
         all_scores, all_boxes, all_points = (x[valid] for x in (all_scores, all_boxes, all_points))
 
         # add all detections
         for confidence, box, points in zip(all_scores.tolist(), all_boxes, all_points, strict=False):
             request.detections.append(Face(label="FACE", confidence=confidence, box=box, points=points))
-        request.clear()
         return request
 
     def default_response(self, **kwargs) -> Any:
