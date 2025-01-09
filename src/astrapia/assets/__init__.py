@@ -1,4 +1,4 @@
-__all__ = ["PATH_TO_ASSETS", "MODELS"]
+__all__ = ["MODELS", "PATH_TO_ASSETS"]
 
 import pathlib
 from typing import Any

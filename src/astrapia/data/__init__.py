@@ -1,4 +1,4 @@
-__all__ = ["BaseData", "Box", "Point", "BaseDetection", "Face", "BaseTensor", "ImageTensor", "Points"]
+__all__ = ["BaseData", "BaseDetection", "BaseTensor", "Box", "Face", "ImageTensor", "Point", "Points"]
 
 from astrapia.data.base import BaseData
 from astrapia.data.detection import BaseDetection, Box, Point
