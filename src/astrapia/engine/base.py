@@ -11,13 +11,13 @@ from astrapia.callbacks.base import BaseCallback
 from astrapia.utils import timer
 
 
-logger = logging.getLogger("BaseProcess")
+logger = logging.getLogger("Base")
 
 
 class Extra(pydantic.BaseModel, extra="allow"): ...
 
 
-class BaseProcess(ABC):
+class Base(ABC):
     """Base process."""
 
     class Specs(pydantic.BaseModel, extra="ignore"):

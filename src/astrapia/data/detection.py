@@ -1,3 +1,5 @@
+from typing import Annotated
+
 import cv2
 import numpy as np
 import pydantic
@@ -48,19 +50,18 @@ class BaseDetection(BaseData, arbitrary_types_allowed=True):
     label: str
     confidence: float
     box: np.ndarray
+    embedding: Annotated[np.ndarray | None, pydantic.Field(default=None)]
+    points: Annotated[np.ndarray | None, pydantic.Field(default=None)]
 
-    @pydantic.field_validator("box", mode="before")
+    @pydantic.field_validator("box", "embedding", "points", mode="before")
     @classmethod
-    def validate_box(cls, data: np.ndarray) -> np.ndarray:
+    def validate_1d_ndarray(cls, data: np.ndarray) -> np.ndarray:
         if isinstance(data, str):
             data = cls.decode(data)
         if isinstance(data, list | tuple):
             data = np.array(data, dtype=np.float32)
         if isinstance(data, np.ndarray):
             data = np.float32(data).reshape(-1)
-
-        if not (isinstance(data, np.ndarray) and data.size == 4):
-            raise ValueError(f"{cls.__name__}: box ndarray of shape (4, ).")
         return data
 
     @property
@@ -110,9 +111,9 @@ class BaseDetection(BaseData, arbitrary_types_allowed=True):
         x, y, w, h = np.float32(box)
         return np.float32([x - w / 2, y - h / 2, x + w / 2, y + h / 2])
 
-    @pydantic.field_serializer("box", when_used="json")
-    def serialize_box(self, data: np.ndarray) -> str:
-        return self.encode(data)
+    @pydantic.field_serializer("box", "embedding", "points", when_used="json")
+    def serialize_ndarray(self, data: np.ndarray | None) -> str | None:
+        return data if data is None else self.encode(data)
 
     def __repr__(self) -> str:
         box = np.round(self.cornerform).astype(int).tolist()

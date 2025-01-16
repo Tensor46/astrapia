@@ -20,6 +20,7 @@ class BaseData(pydantic.BaseModel, arbitrary_types_allowed=True, extra="ignore")
         return super().model_dump(**kwargs)
 
     def model_dump_json(self, **kwargs) -> str:
+        self.clear_storage()
         kwargs["exclude"] = kwargs["exclude"] if "exclude" in kwargs else set()
         kwargs["exclude"].add("storage")
         return super().model_dump_json(**kwargs)

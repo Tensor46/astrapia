@@ -10,10 +10,20 @@ from astrapia.geometry import transform
 
 class Face(BaseDetection):
     name: Annotated[Literal["FACE"], pydantic.Field(default="FACE")]
-    points: np.ndarray
 
     __target_corners__ = np.array([[0.25, 0.35], [0.75, 0.35], [0.75, 0.85], [0.25, 0.85]], dtype=np.float32)
     __target_points__ = np.array([[0.39, 0.50], [0.61, 0.50], [0.50, 0.65], [0.50, 0.75]], dtype=np.float32)
+
+    @pydantic.field_validator("box", "embedding", mode="before")
+    @classmethod
+    def validate_1d_ndarray(cls, data: np.ndarray) -> np.ndarray:
+        if isinstance(data, str):
+            data = cls.decode(data)
+        if isinstance(data, list | tuple):
+            data = np.array(data, dtype=np.float32)
+        if isinstance(data, np.ndarray):
+            data = np.float32(data).reshape(-1)
+        return data
 
     @pydantic.field_validator("points", mode="before")
     @classmethod
@@ -37,6 +47,12 @@ class Face(BaseDetection):
     def iod(self) -> float:
         """Inter ocular distance."""
         return ((self.right_eye - self.left_eye) ** 2).sum().item() ** 0.5
+
+    @property
+    def iod_approximate(self) -> float:
+        """Approximate IOD better for off angle faces."""
+        points = self.source[:3]
+        return (((points[:, None] - points[None]) ** 2).sum(-1) ** 0.5).max()
 
     @property
     def eye_center(self) -> np.ndarray:
@@ -91,16 +107,17 @@ class Face(BaseDetection):
     def source(self) -> np.ndarray:
         return np.stack((self.right_eye, self.left_eye, self.nose_tip, self.mouth), 0)
 
-    def aligned_face_with_tm(
+    def aligned_face(
         self,
         image: np.ndarray,
         side: int | None = None,
         pad: float = 0.0,
         allow_smaller_side: bool = True,
-    ) -> tuple[np.ndarray, np.ndarray]:
+    ) -> np.ndarray:
+        """Align face with landmarks (eyes, nose-tip and mouth)."""
         source = np.stack((self.right_eye, self.left_eye, self.nose_tip, self.mouth), 0)
         reye, leye, *_ = self.__target_points__
-        h = w = int(self.iod / (((reye - leye) ** 2).sum() ** 0.5))
+        h = w = int(self.iod_approximate / (((reye - leye) ** 2).sum() ** 0.5))
         if side is not None:
             h = w = h if allow_smaller_side and side > h else side
 
@@ -112,22 +129,13 @@ class Face(BaseDetection):
         target[:, 1] *= h
         tm = transform.similarity(source, target)
         aligend_image, _ = transform.source2target_converter(image, None, size_hxw=(h, w), tmat=tm)
-        return aligend_image, tm
-
-    def aligned_face(
-        self,
-        image: np.ndarray,
-        side: int | None = None,
-        pad: float = 0.0,
-        allow_smaller_side: bool = True,
-    ) -> np.ndarray:
-        """Align face with landmarks (eyes, nose-tip and mouth)."""
-        return self.aligned_face_with_tm(image, side, pad, allow_smaller_side)[0]
+        self.storage["tmat"] = tm
+        return aligend_image
 
     def face_crop(self, image: np.ndarray, iod_multiplier: float = 4.0) -> np.ndarray:
         """Face crop with eyes at the center."""
         x, y = self.eye_center.tolist()
-        side = self.iod * iod_multiplier
+        side = self.iod_approximate * iod_multiplier
         x1, y1, x2, y2 = (int(xy) for xy in (x - side / 2, y - side / 2, x + side / 2, y + side / 2))
         return image[y1:y2, x1:x2]
 
@@ -149,14 +157,10 @@ class Face(BaseDetection):
         """Annotate image."""
         image = super().annotate(image, inplace=inplace)
         # add points
-        radius = int(max(2, self.iod // 64))
+        radius = int(max(2, self.iod_approximate // 64))
         for x, y in self.points if all_points else (self.right_eye, self.left_eye, self.nose_tip):
             cv2.circle(image, (round(x), round(y)), radius, (16, 196, 146), -1)
         return image
-
-    @pydantic.field_serializer("points", when_used="json")
-    def serialize_points(self, data: np.ndarray) -> str:
-        return self.encode(data)
 
     def __repr__(self) -> str:
         is_mesh = self.points.shape[0] == 468

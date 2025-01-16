@@ -1,4 +1,4 @@
-__all__ = ["BaseMLProcess", "BaseProcess"]
+__all__ = ["Base", "BaseML"]
 
-from astrapia.engine.base import BaseProcess
-from astrapia.engine.base_ml import BaseMLProcess
+from astrapia.engine.base import Base
+from astrapia.engine.base_ml import BaseML

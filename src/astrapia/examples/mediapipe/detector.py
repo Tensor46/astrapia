@@ -9,7 +9,8 @@ from astrapia.callbacks.base import BaseCallback
 from astrapia.callbacks.to_bchw import ToBCHW
 from astrapia.data.face import Face
 from astrapia.data.tensor import ImageTensor
-from astrapia.engine.base_ml import BaseMLProcess
+from astrapia.engine.base_ml import BaseML
+from astrapia.examples.mediapipe.mesh import Algorithm as AlgoMesh
 from astrapia.utils.nms_fns import nms_numba
 
 
@@ -29,8 +30,18 @@ class PrepareImages(BaseCallback):
         return request
 
 
-class Process(BaseMLProcess):
-    class Specs(BaseMLProcess.Specs):
+class AddMesh(BaseCallback):
+    def __init__(self, specs: pydantic.BaseModel) -> None:
+        self.specs = specs
+        self.mesh_model = AlgoMesh.load_mesh(engine=self.specs.engine)
+
+    def after_process(self, request: ImageTensor) -> Any:
+        self.mesh_model(request)
+        return request
+
+
+class Algorithm(BaseML):
+    class Specs(BaseML.Specs):
         name: Literal["MediaPipe-Detector"]
         version: Literal["short", "long"]
 
@@ -40,6 +51,7 @@ class Process(BaseMLProcess):
 
     def __init__(self, **kwargs) -> None:
         kwargs["sizes"] = set(kwargs["sizes"]) if "sizes" in kwargs else set()
+        kwargs["add_mesh"] = kwargs["add_mesh"] if "add_mesh" in kwargs else False
         super().__init__(
             **kwargs,
             # Detector Specs
@@ -49,6 +61,8 @@ class Process(BaseMLProcess):
             min_area=12,
         )
         self.__callbacks__ += (PrepareImages(self.specs), ToBCHW(self.specs))
+        if self.specs.extra.add_mesh:
+            self.__callbacks__ += (AddMesh(self.specs),)
 
     def add_extra_size(self, size: tuple[int, int]) -> None:
         self.specs.extra.sizes.add(size)
@@ -71,18 +85,18 @@ class Process(BaseMLProcess):
         return _compute_anchors(size, self.specs.extra.strides)
 
     @classmethod
-    def load_short(cls, engine: Literal["coreml", "onnxruntime"]):
+    def load_short(cls, engine: Literal["coreml", "onnxruntime"], **kwargs):
         specs = assets.load_yaml(assets.PATH_TO_ASSETS / "configs/mediapipe_short.yaml")
         specs["path_to_assets"] = assets.PATH_TO_ASSETS
         specs["engine"] = engine
-        return cls(**specs)
+        return cls(**specs, **kwargs)
 
     @classmethod
-    def load_long(cls, engine: Literal["coreml", "onnxruntime"]):
+    def load_long(cls, engine: Literal["coreml", "onnxruntime"], **kwargs):
         specs = assets.load_yaml(assets.PATH_TO_ASSETS / "configs/mediapipe_long.yaml")
         specs["path_to_assets"] = assets.PATH_TO_ASSETS
         specs["engine"] = engine
-        return cls(**specs)
+        return cls(**specs, **kwargs)
 
     def process(self, request: Any) -> Any:
         all_scores, all_boxes, all_points = None, None, None

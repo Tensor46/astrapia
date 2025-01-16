@@ -6,16 +6,16 @@ from typing import Annotated, Any, Literal
 import numpy as np
 import pydantic
 
-from astrapia.engine.base import BaseProcess
+from astrapia.engine.base import Base
 
 
-logger = logging.getLogger("BaseProcess")
+logger = logging.getLogger("BaseML")
 
 
-class BaseMLProcess(BaseProcess):
+class BaseML(Base):
     """Base ML process."""
 
-    class Specs(BaseProcess.Specs, arbitrary_types_allowed=True, extra="ignore"):
+    class Specs(Base.Specs, arbitrary_types_allowed=True, extra="ignore"):
         path_to_assets: pathlib.Path
         path_in_assets: str
         engine: Annotated[Literal["coreml", "onnxruntime"], pydantic.Field(frozen=True)]
@@ -32,12 +32,8 @@ class BaseMLProcess(BaseProcess):
                 data = np.squeeze(np.array(data, dtype=np.float32))
             return data
 
-        @pydantic.field_serializer("mean", when_used="json")
-        def serialize_mean(self, data: np.ndarray) -> str:
-            return data.tolist() if isinstance(data, np.ndarray) else data
-
-        @pydantic.field_serializer("stnd", when_used="json")
-        def serialize_stnd(self, data: np.ndarray) -> str:
+        @pydantic.field_serializer("mean", "stnd", when_used="json")
+        def serialize_mean_stnd(self, data: np.ndarray) -> str:
             return data.tolist() if isinstance(data, np.ndarray) else data
 
     __specs__ = Specs

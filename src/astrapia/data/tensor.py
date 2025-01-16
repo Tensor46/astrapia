@@ -117,6 +117,8 @@ class ImageTensor(BaseTensor):
         if path.suffix != ".yaml":
             raise TypeError(f"{self.__class__.__name__}.save_detections: path must have '.yaml' as suffix.")
 
+        for detection in self.detections:
+            detection.clear_storage()
         with open(path, "w") as txt:
             txt.write(self.model_dump_json(exclude={"storage", "tensor"}, indent=2))
 

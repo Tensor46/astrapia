@@ -8,7 +8,7 @@ from astrapia.callbacks.base import BaseCallback
 from astrapia.callbacks.to_bchw import ToBCHW
 from astrapia.data.face import Face
 from astrapia.data.tensor import ImageTensor
-from astrapia.engine.base_ml import BaseMLProcess
+from astrapia.engine.base_ml import BaseML
 from astrapia.geometry.transform import source2target_converter
 
 
@@ -21,22 +21,22 @@ class PrepareImages(BaseCallback):
         request.storage["tms"] = []
         for detection in request.detections:
             if isinstance(detection, Face):
-                image, tm = detection.aligned_face_with_tm(
+                image = detection.aligned_face(
                     request.tensor,
                     side=max(self.specs.size),
                     pad=-0.1,
                     allow_smaller_side=False,
                 )
                 request.storage["images"].append(image)
-                request.storage["tms"].append(tm)
+                request.storage["tms"].append(detection.storage["tmat"])
             else:
                 request.storage["images"].append(None)
                 request.storage["tms"].append(None)
         return request
 
 
-class Process(BaseMLProcess):
-    class Specs(BaseMLProcess.Specs):
+class Algorithm(BaseML):
+    class Specs(BaseML.Specs):
         name: Literal["MediaPipe-Mesh"]
         version: Literal["mesh"]
 
