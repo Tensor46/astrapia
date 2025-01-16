@@ -7,45 +7,6 @@ import pydantic
 from astrapia.data.base import BaseData
 
 
-class Box(BaseData):
-    """Bounding Box (center-x, center-y, width, height)."""
-
-    x: float  # center-x
-    y: float  # center-y
-    w: float  # width
-    h: float  # height
-
-    @classmethod
-    def from_cornerform(cls, x1, y1, x2, y2):
-        return cls((x1 + x2) / 2, (y1 + y2) / 2, x2 - x1, y2 - y1)
-
-    @property
-    def centerform(self) -> tuple[float, float, float, float]:
-        return (self.x, self.y, self.w, self.h)
-
-    @property
-    def numpy_centerform(self) -> np.ndarray:
-        return np.float32(self.centerform)
-
-    @property
-    def cornerform(self) -> tuple[float, float, float, float]:
-        return (self.x - 0.5 * self.w, self.y - 0.5 * self.h, self.x + 0.5 * self.w, self.y + 0.5 * self.h)
-
-    @property
-    def numpy_cornerform(self) -> np.ndarray:
-        return np.float32(self.cornerform)
-
-
-class Point(BaseData):
-    """Point (x, y)."""
-
-    x: float
-    y: float
-
-    def numpy(self) -> np.ndarray:
-        return np.array([self.x, self.y], dtype=np.float32)
-
-
 class BaseDetection(BaseData, arbitrary_types_allowed=True):
     label: str
     confidence: float

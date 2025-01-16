@@ -58,7 +58,7 @@ class ImageTensor(BaseTensor):
         return data
 
     @property
-    def show(self) -> ImPIL.Image:
+    def pil_image(self) -> ImPIL.Image:
         return ImPIL.fromarray(self.tensor)
 
     @property
@@ -121,15 +121,3 @@ class ImageTensor(BaseTensor):
             detection.clear_storage()
         with open(path, "w") as txt:
             txt.write(self.model_dump_json(exclude={"storage", "tensor"}, indent=2))
-
-
-class Points(BaseTensor):
-    @pydantic.field_validator("tensor", mode="before")
-    @classmethod
-    def validate_tensor(cls, data: np.ndarray | str) -> np.ndarray:
-        if isinstance(data, str):
-            data = BaseTensor.decode(data)
-
-        if not (isinstance(data, np.ndarray) and data.ndim == 2 and data.shape[-1] in (2, 3)):
-            raise ValueError("Points: tensor must be 2-dimensional ndarray of shape Nx2 or Nx3.")
-        return data
