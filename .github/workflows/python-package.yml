@@ -51,7 +51,7 @@ jobs:
         run: |
           make
           python -m pip install --upgrade pip
-          pip install hatch
+          pip install -U hatch
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
       - name: set up pip cache
@@ -71,3 +71,9 @@ jobs:
 
       - name: hatch build
         run: hatch build
+
+      - name: publish
+        env:
+          HATCH_INDEX_USER: __token__
+          HATCH_INDEX_AUTH: ${{ secrets.PYPI_API_TOKEN }}
+        run: hatch publish
