@@ -36,14 +36,14 @@ class BaseData(pydantic.BaseModel, arbitrary_types_allowed=True, extra="ignore")
         magic: str = f"{data.dtype!s}/{__MAGIC__}"
         if len(data.shape) >= 2:
             magic = f"{'/'.join(str(n) for n in data.shape)}/{magic}"
-        return magic + base64.b64encode(data.tobytes()).decode("utf-8")
+        return base64.b64encode(magic.encode() + data.tobytes()).decode("utf-8")
 
     @staticmethod
     def decode(data: str) -> np.ndarray:
-        splits = data.split(__MAGIC__)
+        splits = base64.b64decode(data).split(__MAGIC__.encode())
         if len(splits) != 2:
             raise ValueError("BaseData.decode: data does not contain the MAGIC string.")
 
-        *subsplits, dtype = splits[0].strip()[:-1].split("/")
+        *subsplits, dtype = splits[0].decode().strip()[:-1].split("/")
         shape = tuple(map(int, subsplits)) if len(subsplits) else (-1,)
-        return np.frombuffer(base64.b64decode(splits[1]), dtype).reshape(*shape)
+        return np.frombuffer(splits[1], dtype).reshape(*shape)

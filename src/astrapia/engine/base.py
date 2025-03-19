@@ -22,7 +22,7 @@ class Base(ABC):
 
     class Specs(pydantic.BaseModel, extra="ignore"):
         name: str
-        version: pydantic.constr(to_lower=True)
+        version: Annotated[str, pydantic.StringConstraints(strip_whitespace=True, to_lower=True)]
         clear_storage: Annotated[bool, pydantic.Field(default=True, frozen=True)]
         extra: Annotated[Extra, pydantic.Field(default=Extra())]
 
