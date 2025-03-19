@@ -43,7 +43,7 @@ class Base(ABC):
     __specs__: pydantic.BaseModel = Specs
 
     def __init__(self, **kwargs) -> None:
-        self.specs = self.__specs__(**kwargs)
+        self.specs = self.__specs__(**self.default_specs(**kwargs))
 
     @property
     def name(self) -> str:
@@ -101,6 +101,9 @@ class Base(ABC):
 
     @abstractmethod
     def default_response(self) -> Any: ...
+
+    def default_specs(self, **kwargs) -> dict[str, Any]:
+        return kwargs
 
     @staticmethod
     def _sigmoid(x: np.ndarray) -> np.ndarray:

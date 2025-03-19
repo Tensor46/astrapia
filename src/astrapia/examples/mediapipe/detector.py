@@ -50,16 +50,7 @@ class Algorithm(BaseML):
     __response__ = ImageTensor
 
     def __init__(self, **kwargs) -> None:
-        kwargs["sizes"] = set(kwargs["sizes"]) if "sizes" in kwargs else set()
-        kwargs["add_mesh"] = kwargs["add_mesh"] if "add_mesh" in kwargs else False
-        super().__init__(
-            **kwargs,
-            # Detector Specs
-            strides=(8, 16, 16, 16) if kwargs.get("version", "short") == "short" else (16, 32, 32, 32),
-            threshold_iou=0.3,
-            threshold_extra_sizes=0.8,  # non native sizes require higher threshold
-            min_area=12,
-        )
+        super().__init__(**kwargs)
         self.__callbacks__ += (PrepareImages(self.specs), ToBCHW(self.specs))
         if self.specs.extra.add_mesh:
             self.__callbacks__ += (AddMesh(self.specs),)
@@ -160,3 +151,13 @@ class Algorithm(BaseML):
     def default_response(self, **kwargs) -> Any:
         # Since request is the response!
         raise NotImplementedError()
+
+    def default_specs(self, **kwargs) -> dict[str, Any]:
+        kwargs.setdefault("version", "short")
+        kwargs.setdefault("sizes", set())
+        kwargs.setdefault("add_mesh", False)
+        kwargs["strides"] = (8, 16, 16, 16) if kwargs["version"] == "short" else (16, 32, 32, 32)
+        kwargs.setdefault("threshold_iou", 0.3)
+        kwargs.setdefault("threshold_extra_sizes", 0.8)
+        kwargs.setdefault("min_area", 12)
+        return kwargs
