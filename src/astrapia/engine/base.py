@@ -106,8 +106,7 @@ class Base(ABC):
         return kwargs
 
     @staticmethod
-    def _sigmoid(x: np.ndarray) -> np.ndarray:
-        x = x.copy()
+    def sigmoid(x: np.ndarray) -> np.ndarray:
         pos = x > 0
         neg = ~pos
         x[pos] = 1 / (1 + np.exp(-x[pos]))
@@ -115,9 +114,9 @@ class Base(ABC):
         return x
 
     @staticmethod
-    def _softmax(x: np.ndarray) -> np.ndarray:
-        x = x - x.max(-1, keepdims=True)
-        return np.exp(x) / np.exp(x).sum(-1, keepdims=True)
+    def softmax(x: np.ndarray) -> np.ndarray:
+        xexp = np.exp(x - x.max(-1, keepdims=True))
+        return xexp / xexp.sum(-1, keepdims=True)
 
     def __repr__(self) -> str:
         return f"{self.specs.name}{self.specs.model_dump_json(exclude={'clear_storage'}, indent=2)}"
