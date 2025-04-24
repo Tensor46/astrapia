@@ -13,9 +13,35 @@ logger = logging.getLogger("BaseML")
 
 
 class BaseML(Base):
-    """Base ML process."""
+    """Base class for ML inference processes supporting CoreML and ONNX Runtime.
+
+    Handles model loading, input/output name extraction, and engine-specific calls.
+
+    Specs:
+        path_to_assets (Path): Base folder for model files.
+        path_in_assets (str): Relative path/name of the model within assets.
+        engine (Literal["coreml","onnxruntime"]): Backend to use.
+        size (tuple[int,...]): Expected input dimensions.
+        mean (np.ndarray|None): Optional per-channel mean for preprocessing.
+        stnd (np.ndarray|None): Optional per-channel std for preprocessing.
+        interpolation (Literal[1,2,3]): OpenCV resize flag.
+        threshold (float): Decision threshold for outputs.
+    """
 
     class Specs(Base.Specs, arbitrary_types_allowed=True, extra="ignore"):
+        """Extended Specs for BaseML.
+
+        Fields:
+            path_to_assets (Path): Directory containing model files.
+            path_in_assets (str): Model file name (without suffix).
+            engine (str): "coreml" or "onnxruntime".
+            size (tuple[int,...]): Input tensor shape.
+            mean (np.ndarray|None): Mean normalization array.
+            stnd (np.ndarray|None): Std normalization array.
+            interpolation (int): Resize interpolation flag.
+            threshold (float): Output threshold value.
+        """
+
         path_to_assets: pathlib.Path
         path_in_assets: str
         engine: Annotated[Literal["coreml", "onnxruntime"], pydantic.Field(frozen=True)]
@@ -28,12 +54,14 @@ class BaseML(Base):
         @pydantic.field_validator("mean", "stnd", mode="before")
         @classmethod
         def to_ndarray(cls, data: Any) -> np.ndarray | None:
+            """Convert list/tuple to numpy array for mean/std fields."""
             if isinstance(data, list | tuple):
                 data = np.squeeze(np.array(data, dtype=np.float32))
             return data
 
         @pydantic.field_serializer("mean", "stnd", when_used="json")
         def serialize_mean_stnd(self, data: np.ndarray) -> str:
+            """Serialize mean/stnd numpy arrays to lists for JSON output."""
             return data.tolist() if isinstance(data, np.ndarray) else data
 
     __specs__ = Specs
@@ -42,14 +70,21 @@ class BaseML(Base):
     __onnx_providers__: Literal["AUTO", "CPU"] = "AUTO"
 
     def __init__(self, **kwargs) -> None:
+        """Initialize specs and load the model."""
         super().__init__(**kwargs)
         self._load_model()
 
     @property
     def name(self) -> str:
+        """Return the process name including engine info."""
         return f"{self.specs.name}: ({self.specs.version}, engine={self.specs.engine})"
 
     def _load_model(self) -> None:
+        """Load the ML model from assets based on the specified engine.
+
+        Raises:
+            FileNotFoundError: If the model file or package is missing.
+        """
         path_to_model = (self.specs.path_to_assets / self.specs.path_in_assets).with_suffix(".onnx")
         if self.specs.engine == "coreml":
             path_to_model = path_to_model.with_suffix(".mlmodel")
@@ -93,14 +128,38 @@ class BaseML(Base):
             self.__onames__ = tuple(x.name for x in self.model.get_outputs())
 
     def _call_coreml(self, *args) -> dict[str, Any]:
+        """Run inference on a CoreML model.
+
+        Args:
+            *args: Ordered inputs matching model input names.
+
+        Returns:
+            dict: Mapping of output names to prediction arrays.
+        """
         output = self.model.predict(dict(zip(self.__inames__, args, strict=False)))
         return {name: output[name] for name in self.__onames__}
 
     def _call_onnxruntime(self, *args) -> dict[str, Any]:
+        """Run inference on an ONNX Runtime session.
+
+        Args:
+            *args: Ordered inputs matching model input names.
+
+        Returns:
+            dict: Mapping of output names to prediction arrays.
+        """
         output = self.model.run(list(self.__onames__), dict(zip(self.__inames__, args, strict=False)))
         return dict(zip(self.__onames__, output, strict=False))
 
     def process(self, *args) -> Any:
+        """Dispatch inference call based on the selected engine.
+
+        Args:
+            *args: Model input tensors.
+
+        Returns:
+            Any: Prediction outputs.
+        """
         if self.specs.engine == "coreml":
             output = self._call_coreml(*args)
 
@@ -113,4 +172,6 @@ class BaseML(Base):
         return output
 
     @abstractmethod
-    def default_response(self) -> Any: ...
+    def default_response(self) -> Any:
+        """Provide a default response structure for downstream handling."""
+        ...
