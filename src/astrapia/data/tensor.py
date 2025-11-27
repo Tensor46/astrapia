@@ -50,8 +50,8 @@ class BaseTensor(BaseData, arbitrary_types_allowed=True):
         return BaseData.encode(data)
 
     @property
-    def shape(self) -> tuple[int, ...]:
-        """Return the shape of the tensor."""
+    def size(self) -> tuple[int, ...]:
+        """Return the size of the tensor."""
         return self.tensor.shape
 
 
@@ -111,11 +111,11 @@ class ImageTensor(BaseTensor):
 
     @property
     def height(self) -> int:
-        return self.shape[0]
+        return self.size[0]
 
     @property
     def width(self) -> int:
-        return self.shape[1]
+        return self.size[1]
 
     def to_gray(self, inplace: bool = False) -> np.ndarray:
         """Convert image to grayscale.
@@ -178,13 +178,13 @@ class ImageTensor(BaseTensor):
         Returns:
             (padded_image, scale): The new image and scale factor.
         """
-        scale = size[0] / self.shape[0]
-        if any(int(tsz * scale) > sz for tsz, sz in zip(self.shape, size, strict=False)):
-            scale = size[1] / self.shape[1]
-        size_new = tuple(map(int, map(round, (self.shape[0] * scale, self.shape[1] * scale))))
+        scale = size[0] / self.size[0]
+        if any(int(tsz * scale) > sz for tsz, sz in zip(self.size, size, strict=False)):
+            scale = size[1] / self.size[1]
+        size_new = tuple(round(s * scale) for s in self.size[:2])
 
         tensor = cv2.resize(self.tensor, size_new[::-1], interpolation=interpolation)
-        canvas = np.zeros(list(size) + ([self.shape[-1]] if len(self.shape) == 3 else []), tensor.dtype)
+        canvas = np.zeros(list(size) + ([self.size[-1]] if len(self.size) == 3 else []), tensor.dtype)
         canvas[: size_new[0], : size_new[1]] = tensor
         return canvas, scale
 
