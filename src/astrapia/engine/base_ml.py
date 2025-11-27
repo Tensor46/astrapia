@@ -1,15 +1,50 @@
 import logging
 import pathlib
+import platform
 from abc import abstractmethod
 from typing import Annotated, Any, Literal
 
+import cpuinfo
 import numpy as np
+import onnxruntime as onnxrt
 import pydantic
 
 from astrapia.engine.base import Base
 
 
 logger = logging.getLogger("BaseML")
+
+
+def auto_onnxrt_providers(ignore_onnxrt_providers: list[str]) -> list[str]:
+    def has_intel_on_linux() -> bool:
+        info = cpuinfo.get_cpu_info()
+        return platform.system() == "Linux" and "intel" in info.get("brand_raw", "").lower()
+
+    providers: list[str] = ["CPUExecutionProvider"]
+    if (
+        "CoreMLExecutionProvider" not in ignore_onnxrt_providers
+        and "CoreMLExecutionProvider" in onnxrt.get_available_providers()
+    ):
+        providers = ["CoreMLExecutionProvider", *providers]
+        return providers
+
+    for provider in (
+        "CoreMLExecutionProvider",
+        "OpenVINOExecutionProvider",
+        "CUDAExecutionProvider",
+        "TensorrtExecutionProvider",
+    ):
+        if provider not in onnxrt.get_available_providers():
+            continue
+        if provider == "OpenVINOExecutionProvider" and not has_intel_on_linux():
+            continue
+        if provider in ignore_onnxrt_providers:
+            continue
+
+        providers = [provider, *providers]
+        if provider == "CoreMLExecutionProvider":  # Apple Silicon: rest can be ignored
+            break
+    return providers
 
 
 class BaseML(Base):
@@ -40,6 +75,7 @@ class BaseML(Base):
             stnd (np.ndarray|None): Std normalization array.
             interpolation (int): Resize interpolation flag.
             threshold (float): Output threshold value.
+            ignore_onnxrt_providers (list[str]): List of providers to ignore.
         """
 
         path_to_assets: pathlib.Path
@@ -50,6 +86,18 @@ class BaseML(Base):
         stnd: np.ndarray | None
         interpolation: Literal[1, 2, 3]
         threshold: float
+        ignore_onnxrt_providers: Annotated[
+            list[
+                Literal[
+                    "CoreMLExecutionProvider",
+                    "CPUExecutionProvider",
+                    "CUDAExecutionProvider",
+                    "OpenVINOExecutionProvider",
+                    "TensorrtExecutionProvider",
+                ],
+            ],
+            pydantic.Field(default_factory=list),
+        ]
 
         @pydantic.field_validator("mean", "stnd", mode="before")
         @classmethod
@@ -109,20 +157,16 @@ class BaseML(Base):
                 logger.error(f"{self.__class__.__name__}: file not found {path_to_model}")
                 raise FileNotFoundError(f"{self.__class__.__name__}: file not found {path_to_model}")
 
-            import onnxruntime as ort
-
-            options = ort.SessionOptions()
+            options = onnxrt.SessionOptions()
             options.enable_mem_pattern = True
             options.enable_mem_reuse = True
-            options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_EXTENDED
-            providers = ["CPUExecutionProvider"]
-            if self.__onnx_providers__ == "AUTO" and "TensorrtExecutionProvider" in ort.get_available_providers():
-                providers = ["TensorrtExecutionProvider", *providers]
-            if self.__onnx_providers__ == "AUTO" and "CUDAExecutionProvider" in ort.get_available_providers():
-                providers = ["CUDAExecutionProvider", *providers]
-            if self.__onnx_providers__ == "AUTO" and "CoreMLExecutionProvider" in ort.get_available_providers():
-                providers = ["CoreMLExecutionProvider", *providers]
-            self.model = ort.InferenceSession(path_to_model, sess_options=options, providers=providers)
+            options.graph_optimization_level = onnxrt.GraphOptimizationLevel.ORT_ENABLE_EXTENDED
+            if self.__onnx_providers__ == "AUTO":
+                providers = auto_onnxrt_providers(self.specs.ignore_onnxrt_providers)
+            else:
+                providers = ["CPUExecutionProvider"]
+
+            self.model = onnxrt.InferenceSession(path_to_model, sess_options=options, providers=providers)
             # get input and output names
             self.__inames__ = tuple(x.name for x in self.model.get_inputs())
             self.__onames__ = tuple(x.name for x in self.model.get_outputs())
