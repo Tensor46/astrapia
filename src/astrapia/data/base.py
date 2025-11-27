@@ -1,5 +1,5 @@
 import base64
-from typing import Annotated, Any
+from typing import Annotated, Any, get_args, get_origin
 
 import numpy as np
 import pydantic
@@ -16,11 +16,18 @@ class BaseData(pydantic.BaseModel, arbitrary_types_allowed=True, extra="ignore")
     (excluding storage), and encode/decode numpy arrays to/from base64 strings.
     """
 
-    storage: Annotated[dict[str, Any], pydantic.Field(default={})]
+    storage: Annotated[dict[str, Any], pydantic.Field(default_factory=dict)]
 
     def clear_storage(self) -> None:
         """Clear all entries in the auxiliary storage."""
         self.storage = {}
+        for field, finfo in self.model_fields.items():
+            ann = finfo.annotation
+            if get_origin(ann) is Annotated:
+                ann = get_args(ann)[0]
+
+            if isinstance(ann, type) and issubclass(ann, BaseData):
+                getattr(self, field).clear_storage()
 
     def model_dump(self, **kwargs) -> dict[str, Any]:
         """Serialize model to a dict, excluding the `storage` field."""
@@ -84,3 +91,26 @@ class BaseData(pydantic.BaseModel, arbitrary_types_allowed=True, extra="ignore")
         *subsplits, dtype = splits[0].decode().strip()[:-1].split("/")
         shape = tuple(map(int, subsplits)) if len(subsplits) else (-1,)
         return np.frombuffer(splits[1], dtype).reshape(*shape)
+
+
+class Extra(pydantic.BaseModel, extra="allow"):
+    """Container for any extra, unspecified spec fields."""
+
+    ...
+
+
+class BaseDataWithExtra(BaseData):
+    """BaseData with extra, a BaseModel that will hold all new fields."""
+
+    extra: Annotated[Extra, pydantic.Field(default_factory=Extra)]
+
+    @pydantic.model_validator(mode="before")
+    @classmethod
+    def extras(cls, data: dict[str, Any]) -> dict[str, Any]:
+        """Move any unrecognized keys into the `extra` field before validation."""
+        for key in list(data.keys()):
+            if key not in cls.model_fields:
+                if "extra" not in data:
+                    data["extra"] = {}
+                data["extra"][key] = data[key]
+        return data
