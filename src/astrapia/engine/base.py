@@ -8,16 +8,11 @@ import pydantic
 
 from astrapia import assets
 from astrapia.callbacks.base import BaseCallback
+from astrapia.data.base import BaseDataWithExtra
 from astrapia.utils import timer
 
 
 logger = logging.getLogger("Base")
-
-
-class Extra(pydantic.BaseModel, extra="allow"):
-    """Container for any extra, unspecified spec fields."""
-
-    ...
 
 
 class Base(ABC):
@@ -27,31 +22,19 @@ class Base(ABC):
     and common utilities (sigmoid, softmax, YAML loading).
     """
 
-    class Specs(pydantic.BaseModel, extra="ignore"):
+    class Specs(BaseDataWithExtra):
         """Specification model for a processing instance.
 
         Fields:
             name (str): Identifier for this process.
             version (str): Lowercased version string.
-            clear_storage (bool): If True, clear request/response storage after processing.
+            clear_storage_on_exit (bool): If True, clear request/response storage after processing.
             extra (Extra): Any additional keyword fields.
         """
 
         name: str
         version: Annotated[str, pydantic.StringConstraints(strip_whitespace=True, to_lower=True)]
-        clear_storage: Annotated[bool, pydantic.Field(default=True, frozen=True)]
-        extra: Annotated[Extra, pydantic.Field(default=Extra())]
-
-        @pydantic.model_validator(mode="before")
-        @classmethod
-        def extras(cls, data: dict[str, Any]) -> dict[str, Any]:
-            """Move any unrecognized keys into the `extra` field before validation."""
-            for key in list(data.keys()):
-                if key not in cls.model_fields:
-                    if "extra" not in data:
-                        data["extra"] = {}
-                    data["extra"][key] = data[key]
-            return data
+        clear_storage_on_exit: Annotated[bool, pydantic.Field(default=True, frozen=True)]
 
     __callbacks__: tuple[BaseCallback, ...] = ()
     __extra__ = None
@@ -61,6 +44,8 @@ class Base(ABC):
 
     def __init__(self, **kwargs) -> None:
         """Initialize with `Specs`, applying any default_specs adjustments."""
+        if not issubclass(self.__specs__, BaseDataWithExtra):
+            raise TypeError(f"{self.__class__.__name__}: __specs__ must be inherited from BaseSpecs.")
         self.specs = self.__specs__(**self.default_specs(**kwargs))
 
     @property
@@ -136,9 +121,9 @@ class Base(ABC):
         for callback in self.__callbacks__:
             callback.after_process(response)
         # clear storage
-        if self.specs.clear_storage and hasattr(request, "clear_storage"):
+        if self.specs.clear_storage_on_exit and hasattr(request, "clear_storage"):
             request.clear_storage()
-        if self.specs.clear_storage and hasattr(response, "clear_storage"):
+        if self.specs.clear_storage_on_exit and hasattr(response, "clear_storage"):
             response.clear_storage()
         return response
 
@@ -192,4 +177,4 @@ class Base(ABC):
         return xexp / xexp.sum(axis, keepdims=True)
 
     def __repr__(self) -> str:
-        return f"{self.specs.name}{self.specs.model_dump_json(exclude={'clear_storage'}, indent=2)}"
+        return f"{self.specs.name}{self.specs.model_dump_json(exclude={'clear_storage_on_exit'}, indent=2)}"
