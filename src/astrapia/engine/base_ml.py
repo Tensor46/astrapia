@@ -20,19 +20,13 @@ def auto_onnxrt_providers(ignore_onnxrt_providers: list[str]) -> list[str]:
         info = cpuinfo.get_cpu_info()
         return platform.system() == "Linux" and "intel" in info.get("brand_raw", "").lower()
 
+    # cpu is always default provider
     providers: list[str] = ["CPUExecutionProvider"]
-    if (
-        "CoreMLExecutionProvider" not in ignore_onnxrt_providers
-        and "CoreMLExecutionProvider" in onnxrt.get_available_providers()
-    ):
-        providers = ["CoreMLExecutionProvider", *providers]
-        return providers
-
     for provider in (
-        "CoreMLExecutionProvider",
-        "OpenVINOExecutionProvider",
-        "CUDAExecutionProvider",
-        "TensorrtExecutionProvider",
+        "CoreMLExecutionProvider",  # when available, highest priority, usually on macOS
+        "OpenVINOExecutionProvider",  # when available, higher priority than CPU -- only on linux
+        "CUDAExecutionProvider",  # when available, higher priority than CPU and OpenVino
+        "TensorrtExecutionProvider",  # when available, highest priority
     ):
         if provider not in onnxrt.get_available_providers():
             continue
@@ -115,7 +109,7 @@ class BaseML(Base):
     __specs__ = Specs
     __inames__: tuple[str, ...] = ()
     __onames__: tuple[str, ...] = ()
-    __onnx_providers__: Literal["AUTO", "CPU"] = "AUTO"
+    __onnxrt_providers__: Literal["AUTO", "CPU"] = "AUTO"
 
     def __init__(self, **kwargs) -> None:
         """Initialize specs and load the model."""
@@ -161,7 +155,7 @@ class BaseML(Base):
             options.enable_mem_pattern = True
             options.enable_mem_reuse = True
             options.graph_optimization_level = onnxrt.GraphOptimizationLevel.ORT_ENABLE_EXTENDED
-            if self.__onnx_providers__ == "AUTO":
+            if self.__onnxrt_providers__ == "AUTO":
                 providers = auto_onnxrt_providers(self.specs.ignore_onnxrt_providers)
             else:
                 providers = ["CPUExecutionProvider"]
